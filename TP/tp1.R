@@ -1,6 +1,7 @@
 #packages
 source("http://www.bioconductor.org/biocLite.R")
 biocLite()
+biocLite("ALL")
 biocLite("GEOquery")
 biocLite("limma")
 biocLite("genefilter")
@@ -8,6 +9,7 @@ install.packages("pillar")
 library(Biobase)
 library(GEOquery)
 library(genefilter)
+library(limma)
 
 ############################## 1- LEITURA E PROCESSAMENTO DE DADOS ###################################
 # 1.1- Leitura de dados
@@ -103,3 +105,32 @@ exprs(eset_filtered) = scale(exp)
 eset_filtered
 
 ################################## 2- EXPRESSÃO DIFERENCIAL ##########################################
+"Identificar o conjunto de gentes que têm níveis diferentes de expressão comparando 
+células normais vs cancerígena através de testes estatísticos de hipóteses.
+  - hipóteste nula: as médias dos níveis de transcrição das duas situações são idênticas
+
+Para a análise de expressão diferencial vamos comparar tecido pulmonar canceroso (SCLC) com tecido
+normal (incluindo tecido de pulmão)."
+
+
+eset_filtered$disease.state = factor(eset_filtered$disease.state)
+table(eset_filtered$disease.state)
+
+
+design = model.matrix(~eset_filtered$disease.state)
+fit = lmFit(eset_filtered, design)
+fit2 = eBayes(fit)
+summary(decideTests(fit))
+diff = topTable(fit2, coef=2, 10)
+diff
+
+library("ALL")
+data(ALL)
+exp = exprs(ALL)
+maximos = apply(exp,1,max)
+minimos = apply(exp,1,min)
+vl = maximos/minimos > 2
+ALLm2 = ALL[vl,]
+exp_m2 = exprs(ALLm2)
+exprs(ALLm2) = scale(exp_m2)
+varMetadata(ALL)
