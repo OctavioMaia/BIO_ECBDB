@@ -133,3 +133,5 @@ cont.matrix
 fit2 = contrasts.fit(fit,cont.matrix)
 fit2 = eBayes(fit2)
 topTable(fit2,adjust.method = 'BH')
+
+######################################### 3- CLUSTERING ##############################################
