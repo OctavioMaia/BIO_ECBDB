@@ -5,11 +5,13 @@ biocLite("ALL")
 biocLite("GEOquery")
 biocLite("limma")
 biocLite("genefilter")
+biocLite("DESeq2")
 install.packages("pillar")
 library(Biobase)
 library(GEOquery)
 library(genefilter)
 library(limma)
+library(DESeq2)
 
 ############################## 1- LEITURA E PROCESSAMENTO DE DADOS ###################################
 # 1.1- Leitura de dados
@@ -105,32 +107,29 @@ exprs(eset_filtered) = scale(exp)
 eset_filtered
 
 ################################## 2- EXPRESSÃO DIFERENCIAL ##########################################
-"Identificar o conjunto de gentes que têm níveis diferentes de expressão comparando 
+"Identificar o conjunto de genes que têm níveis diferentes de expressão comparando 
 células normais vs cancerígena através de testes estatísticos de hipóteses.
-  - hipóteste nula: as médias dos níveis de transcrição das duas situações são idênticas
 
 Para a análise de expressão diferencial vamos comparar tecido pulmonar canceroso (SCLC) com tecido
-normal (incluindo tecido de pulmão)."
+normal (incluindo tecido de pulmão) através de um modelo de variância linear dos genes.
+Uma vez que os valores de expressão genética seguem uma distribuição normal, basta realizar múltiplos testes estatísticos
+que permitem determinar a correlação entre genes.
+No nosso caso de teste os genes estão divididos em dois grandes grupos (tecido pulmonar canceroso e tecido normal)
+  - Criar uma matriz que inclui separadamente os coeficientes dos grupos 'SCLC' e 'normal' e extrair a sua diferença
+  através de um contraste.
+"
+
+eset_filtered$disease.state <- factor(eset_filtered$disease.state,levels = unique(eset_filtered$disease.state))
+eset_filtered$disease.state
+design <- model.matrix(~eset_filtered$disease.state)
+colnames(design) = c('SCLC','normal')
+design
 
 
-eset_filtered$disease.state = factor(eset_filtered$disease.state)
-table(eset_filtered$disease.state)
-
-
-design = model.matrix(~eset_filtered$disease.state)
-fit = lmFit(eset_filtered, design)
-fit2 = eBayes(fit)
-summary(decideTests(fit))
-diff = topTable(fit2, coef=2, 10)
-diff
-
-library("ALL")
-data(ALL)
-exp = exprs(ALL)
-maximos = apply(exp,1,max)
-minimos = apply(exp,1,min)
-vl = maximos/minimos > 2
-ALLm2 = ALL[vl,]
-exp_m2 = exprs(ALLm2)
-exprs(ALLm2) = scale(exp_m2)
-varMetadata(ALL)
+fit = lmFit(eset_filtered,design)
+fit
+cont.matrix = makeContrasts('SCLC','normal',levels=design)
+cont.matrix
+fit2 = contrasts.fit(fit,cont.matrix)
+fit2 = eBayes(fit2)
+topTable(fit2,adjust.method = 'BH')
