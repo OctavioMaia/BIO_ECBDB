@@ -7,14 +7,13 @@ biocLite("genefilter")
 biocLite("DESeq2")
 install.packages("pillar")
 install.packages("rafalib")
-library(rafalib)
 library(Biobase)
 library(GEOquery)
 library(genefilter)
 library(limma)
 library(DESeq2)
 biocLite()
-mypar()
+
 ############################## 1- LEITURA E PROCESSAMENTO DE DADOS ###################################
 # 1.1- Leitura de dados
 gds4794 <- getGEO('GDS4794',destdir = ".")
