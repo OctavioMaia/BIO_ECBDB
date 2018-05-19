@@ -1,18 +1,20 @@
 #packages
 source("http://www.bioconductor.org/biocLite.R")
-biocLite()
 biocLite("ALL")
 biocLite("GEOquery")
 biocLite("limma")
 biocLite("genefilter")
 biocLite("DESeq2")
 install.packages("pillar")
+install.packages("rafalib")
+library(rafalib)
 library(Biobase)
 library(GEOquery)
 library(genefilter)
 library(limma)
 library(DESeq2)
-
+biocLite()
+mypar()
 ############################## 1- LEITURA E PROCESSAMENTO DE DADOS ###################################
 # 1.1- Leitura de dados
 gds4794 <- getGEO('GDS4794',destdir = ".")
@@ -118,6 +120,21 @@ No nosso caso de teste os genes estão divididos em dois grandes grupos (tecido p
   - Criar uma matriz que inclui separadamente os coeficientes dos grupos 'SCLC' e 'normal' e extrair a sua diferença
   através de um contraste.
 "
+# 1 - Expressão diferencial
+tt = rowttests(eset_filtered,"disease.state")
+tt$p.value
+rank = order(tt$p.value)
+p20 = rank[1:20]
+tt$p.value[p20]
+featureNames(eset_filtered[p20])
+
+# 2 - Análise estatistica - package limma
+"Ao testar N genes em simultâneo, o número esperado de falsos positivos é muito alto.
+Este package utiliza uma abordagem de modelos lineares para analisar os níveis de expressão linear
+através de uma matriz design, que indica quais tipo de tecido correspondem a cada amostra. A matriz
+de contraste indica quais as comparações que vão ser feitas entre cada amostra.
+Para os testes estatisticos é utilizado o modelo de Bayes de forma a moderar o erro estimado de cada
+mudança, o que permite obter melhores resultados, especialmente para um número pequeno de amostras."
 
 eset_filtered$disease.state <- factor(eset_filtered$disease.state,levels = unique(eset_filtered$disease.state))
 eset_filtered$disease.state
@@ -132,6 +149,63 @@ cont.matrix = makeContrasts('SCLC','normal',levels=design)
 cont.matrix
 fit2 = contrasts.fit(fit,cont.matrix)
 fit2 = eBayes(fit2)
-topTable(fit2,adjust.method = 'BH')
+diff = topTable(fit2,adjust.method = 'BH')
+diff
 
 ######################################### 3- CLUSTERING ##############################################
+"Se um gene desconhecido i é similar em termos de expressão a um gene conhecido j, é muito provável
+que estejam envolvidos na mesma via metabólica.
+  - Criar matriz de distâncias entre cada par de genes
+  - Pares de genes com distâncias pequenas partilham os mesmos padrões de expressão
+O Clustering revela genes com padrões de expressão semelhantes, logo potencialmente
+relacionados funcionalmente"
+
+#ordenar genes por menor p-value
+#adj.P.Val corresponde ao p.value ajustado para testes múltiplos
+rank = order(diff$adj.P.Val)
+p10 = eset_filtered[rank]
+
+#Criar matriz de distâncias Euclidianas
+dEuc <- dist(exprs(p10))
+dEuc
+
+# 1 - Hierarchical clustering
+"Uma vez computada a matriz de distâncias, o algoritmo de clustering vai servir para agrupar genes.
+Neste tipo de clustering, cada amostra é atrubuida ao seu próprio grupo e o algoritmo itera
+juntando, em cada iteração, os dois clusters mais semelhantes até haver apenas um grupo grande.
+
+Na variável d, temos a distância entre genes mas não temos a distância entre grupos. A distância entre
+grupos vai ser calculada pair-wise com a ajuda da primitiva hclust, que retorna um objeto descrevendo
+o algoritmo falado anteriormente. Para visualizar este algoritmo, recorremos à função plot.
+
+Os algoritmos de clustering definidos a seguir permitem, tendo em conta a condição experimental dos
+dados de expressão (tecido normal ou canceroso), quais dos genes tem condições semelhantes, quais os
+tecidos com dados de expressão semelhantes."
+
+#método complete: distância entre dois clusters é a distância máxima entre dois elementos
+cl.hier <- hclust(dEuc)
+plot(cl.hier)
+
+#método simple: distância entre dois clusters é a distância mínima entre dois elementos
+cl.hier <- hclust(dEuc, method='single')
+plot(cl.hier)
+
+#método average
+cl.hier <- hclust(dEuc, method='average')
+plot(cl.hier)
+
+#k-means
+"Escolher o número de k clusters e atribuir um gene a cada cluster aleatoriamente. De seguida
+calcula os novos centros e a distância de cada gene a esse novo centro. Por fim cada gene é atribuido
+ao centro mais próximo. Este processo é repetido até o algoritmo estar estável."
+set.seed(1)
+km <- kmeans(exprs(p10),centers = 3)
+km$cluster
+
+
+#heatmap
+"A árvore da linha representa os genes enquanto a da coluna representa o tecido. As cores na 
+heatmap representam as intensidades (relações) entre genes."
+heatmap(exprs(p10), labCol = F)
+
+####################################### 4- CLASSIFICAÇÂO #############################################
