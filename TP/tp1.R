@@ -1,18 +1,31 @@
 #packages
 source("http://www.bioconductor.org/biocLite.R")
-biocLite("ALL")
+biocLite()
 biocLite("GEOquery")
 biocLite("limma")
 biocLite("genefilter")
 biocLite("DESeq2")
 install.packages("pillar")
-install.packages("rafalib")
+biocLite("GSEABase")
+biocLite("goseq")
+biocLite("GOstats")
+biocLite("Category")
+biocLite("GEOmetadb")
+biocLite("RSQLite")
 library(Biobase)
 library(GEOquery)
 library(genefilter)
 library(limma)
 library(DESeq2)
-biocLite()
+library(GSEABase)
+library(annotate)
+library(org.Hs.eg.db)
+library(goseq)
+library(GOstats)
+library(GEOmetadb)
+library(GO.db)
+install.packages('stringi')
+help(summary)
 
 ############################## 1- LEITURA E PROCESSAMENTO DE DADOS ###################################
 # 1.1- Leitura de dados
@@ -150,6 +163,53 @@ fit2 = contrasts.fit(fit,cont.matrix)
 fit2 = eBayes(fit2)
 diff = topTable(fit2,adjust.method = 'BH')
 diff
+
+# 3- Análise de enriquecimento
+"De forma a obter a package correta foi feita uma procura pela plataforma GPL570
+(informação disponível no DataSet Browser) no website bioconductor.
+  - http://bioconductor.org/packages/release/data/annotation/html/hgu133plus2.db.html
+"
+biocLite("hgu133plus2.db")
+library(hgu133plus2.db)
+
+annotation(eset_filtered) <- "hgu133plus2.db"
+eset_filtered
+
+filt = nsFilter(eset_filtered, require.entrez = T, remove.dupEntrez = T, var.func = IQR,
+                var.cutoff = 0.5, feature.exclude = "^AFFX")
+
+eset_enrich = filt$eset
+eset_enrich
+
+affyUniverse = featureNames(eset_enrich)
+affyUniverse
+entrezUniverse = unlist(mget(affyUniverse,hgu133plus2ENTREZID))
+entrezUniverse
+
+ttests = rowttests(eset_enrich, "disease.state")
+ttests
+smPV = ttests$p.value < 0.05
+pvalFiltered = eset_enrich[smPV,]
+
+
+selectedEntrezIds = unlist((mget(featureNames(pvalFiltered),hgu133plus2ENTREZID)))
+selectedEntrezIds
+
+"Parâmetros:
+  - testDirection: over, uma vez que o total de genes diferencialmente expressos comparado com
+  o total de genes é elevado.
+  - ontology: CC (Cellular Component), ontologia ao qual os termos GO pertencem."
+
+params <- new("GOHyperGParams", geneIds=as.numeric(selectedEntrezIds), universeGeneIds=as.numeric(entrezUniverse),
+             annotation="hgu133plus2.db",ontology="CC", pvalueCutoff=0.01, conditional=F, testDirection="over")
+
+"Criar parâmetros e correr os testes estatísticos hipergeométricos (grupos de genes do Gene ontology),
+genes sobre expressos."
+
+hgOver <- hyperGTest(params)
+
+help(summary)
+summary(hgOver)
 
 ######################################### 3- CLUSTERING ##############################################
 "Se um gene desconhecido i é similar em termos de expressão a um gene conhecido j, é muito provável
