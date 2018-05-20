@@ -24,8 +24,7 @@ library(goseq)
 library(GOstats)
 library(GEOmetadb)
 library(GO.db)
-install.packages('stringi')
-help(summary)
+
 
 ############################## 1- LEITURA E PROCESSAMENTO DE DADOS ###################################
 # 1.1- Leitura de dados
@@ -172,7 +171,7 @@ diff
 biocLite("hgu133plus2.db")
 library(hgu133plus2.db)
 
-annotation(eset_filtered) <- "hgu133plus2.db"
+annotation(eset_filtered) <- "hgu133plus2"
 eset_filtered
 
 filt = nsFilter(eset_filtered, require.entrez = T, remove.dupEntrez = T, var.func = IQR,
@@ -200,8 +199,8 @@ selectedEntrezIds
   o total de genes é elevado.
   - ontology: CC (Cellular Component), ontologia ao qual os termos GO pertencem."
 
-params <- new("GOHyperGParams", geneIds=as.numeric(selectedEntrezIds), universeGeneIds=as.numeric(entrezUniverse),
-             annotation="hgu133plus2.db",ontology="CC", pvalueCutoff=0.01, conditional=F, testDirection="over")
+params <- new("GOHyperGParams", geneIds=selectedEntrezIds, universeGeneIds=entrezUniverse,
+             annotation="hgu133plus2.db",ontology="CC", pvalueCutoff=0.01, testDirection="over")
 
 "Criar parâmetros e correr os testes estatísticos hipergeométricos (grupos de genes do Gene ontology),
 genes sobre expressos."
