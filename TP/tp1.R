@@ -15,6 +15,7 @@ biocLite("Category")
 biocLite("GEOmetadb")
 biocLite("RSQLite")
 biocLite("geneLenDataBase")
+biocLite("hgu133plus2.db")
 library(Biobase)
 library(GEOquery)
 library(genefilter)
@@ -25,6 +26,7 @@ library(annotate)
 library(goseq)
 library(GOstats)
 library(GEOmetadb)
+library(hgu133plus2.db)
 
 
 ############################## 1- LEITURA E PROCESSAMENTO DE DADOS ###################################
@@ -112,7 +114,7 @@ dados de expressão filtrados
   - remoção de probesets (dados omissos, sem informação em todas as colunas)
   - remoção de genes com domínio de valoers muito baixos
 "
-eset_filtered = eset_complete[sds <= 2*m,]
+eset_filtered = eset_complete[sds >= 2*m,]
 eset_filtered
 
 #normalização de dados
@@ -169,8 +171,6 @@ diff
 (informação disponível no DataSet Browser) no website bioconductor.
   - http://bioconductor.org/packages/release/data/annotation/html/hgu133plus2.db.html
 "
-biocLite("hgu133plus2.db")
-library(hgu133plus2.db)
 
 annotation(eset_filtered) <- "hgu133plus2"
 eset_filtered
@@ -207,8 +207,6 @@ params <- new("GOHyperGParams", geneIds=selectedEntrezIds, universeGeneIds=entre
 genes sobre expressos."
 
 hgOver <- hyperGTest(params)
-
-help(summary)
 summary(hgOver)
 
 ######################################### 3- CLUSTERING ##############################################
