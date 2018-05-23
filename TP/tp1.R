@@ -16,6 +16,8 @@ biocLite("GEOmetadb")
 biocLite("RSQLite")
 biocLite("geneLenDataBase")
 biocLite("hgu133plus2.db")
+biocLite("rafalib")
+biocLite("gplots")
 library(Biobase)
 library(GEOquery)
 library(genefilter)
@@ -27,7 +29,9 @@ library(goseq)
 library(GOstats)
 library(GEOmetadb)
 library(hgu133plus2.db)
-
+library(rafalib)
+library(RColorBrewer)
+library(gplots)
 
 ############################## 1- LEITURA E PROCESSAMENTO DE DADOS ###################################
 # 1.1- Leitura de dados
@@ -163,11 +167,22 @@ cont.matrix = makeContrasts('SCLC','normal',levels=design)
 cont.matrix
 fit2 = contrasts.fit(fit,cont.matrix)
 fit2 = eBayes(fit2)
-diff = topTable(fit2,adjust.method = 'BH')
-diff
+help("topTable")
+diff = topTable(fit2,coef = 2,10, adjust.method = 'BH')
+
+"Como podemos verificar, existem 584 genes que foram considerados diferencialmente expressos 
+com as condições determinadas."
+
+test = topTable(fit2,coef = 2,1000, adjust.method = 'BH')
+dim(diff[which(diff$adj.P.Val<0.05),])[1]
+
 
 # 3- Análise de enriquecimento
-"De forma a obter a package correta foi feita uma procura pela plataforma GPL570
+"Genes identificados na análise anterior são comparados com outros conjuntos de genes,
+onde cada um destes contém genes com funções biológicas semelhantes, com objetivo de verificar
+se nos genes identificados existe enriquecimento estatisticamente significativo de algum/vários conjuntos.
+
+De forma a obter a package correta foi feita uma procura pela plataforma GPL570
 (informação disponível no DataSet Browser) no website bioconductor.
   - http://bioconductor.org/packages/release/data/annotation/html/hgu133plus2.db.html
 "
@@ -186,28 +201,38 @@ affyUniverse
 entrezUniverse = unlist(mget(affyUniverse,hgu133plus2ENTREZID))
 entrezUniverse
 
-ttests = rowttests(eset_enrich, "disease.state")
-ttests
-smPV = ttests$p.value < 0.05
+fit.enr = lmFit(eset_enrich,design)
+cont.matrixenr = makeContrasts('SCLC','normal',levels=design)
+fit2.enr = contrasts.fit(fit.enr,cont.matrixenr)
+fit2.enr = eBayes(fit2.enr)
+diff.enr = topTable(fit2.enr,coef = 2,1000, adjust.method = 'BH')
+
+smPV = which(diff.enr$adj.P.Val < 0.05)
 pvalFiltered = eset_enrich[smPV,]
 
 
 selectedEntrezIds = unlist((mget(featureNames(pvalFiltered),hgu133plus2ENTREZID)))
 selectedEntrezIds
 
+pvalFiltered
+eset_enrich
 "Parâmetros:
   - testDirection: over, uma vez que o total de genes diferencialmente expressos comparado com
   o total de genes é elevado.
-  - ontology: CC (Cellular Component), ontologia ao qual os termos GO pertencem."
+  - ontology: BP (Biological process), ontologia ao qual os termos GO pertencem."
 
 params <- new("GOHyperGParams", geneIds=selectedEntrezIds, universeGeneIds=entrezUniverse,
-             annotation="hgu133plus2.db",ontology="CC", pvalueCutoff=0.01, testDirection="over")
+             annotation="hgu133plus2.db",ontology="BP", pvalueCutoff=0.05, testDirection="over")
 
 "Criar parâmetros e correr os testes estatísticos hipergeométricos (grupos de genes do Gene ontology),
 genes sobre expressos."
 
 hgOver <- hyperGTest(params)
 summary(hgOver)
+
+"
+Através da análise de enriquecimento é possivel ver os processos biológicos em que os genes estão envolvidos
+(através da coluna term)."
 
 ######################################### 3- CLUSTERING ##############################################
 "Se um gene desconhecido i é similar em termos de expressão a um gene conhecido j, é muito provável
@@ -216,10 +241,11 @@ que estejam envolvidos na mesma via metabólica.
   - Pares de genes com distâncias pequenas partilham os mesmos padrões de expressão
 O Clustering revela genes com padrões de expressão semelhantes, logo potencialmente
 relacionados funcionalmente"
+diff = topTable(fit2,coef = 2,50, adjust.method = 'BH')
 
 #ordenar genes por menor p-value
 #adj.P.Val corresponde ao p.value ajustado para testes múltiplos
-rank = order(diff$adj.P.Val)
+rank = which(diff$adj.P.Val < 0.05)
 p10 = eset_filtered[rank]
 
 #Criar matriz de distâncias Euclidianas
@@ -244,25 +270,94 @@ cl.hier <- hclust(dEuc)
 plot(cl.hier)
 
 #método simple: distância entre dois clusters é a distância mínima entre dois elementos
-cl.hier <- hclust(dEuc, method='single')
+cl.hier_single <- hclust(dEuc, method='single')
 plot(cl.hier)
 
 #método average
-cl.hier <- hclust(dEuc, method='average')
+cl.hier_average <- hclust(dEuc, method='average')
 plot(cl.hier)
+
+"Os plots anteriores não permitem saber se os genes foram ou não separados por estado de doença. No método
+seguinte é possível verificar, visualmente, que à primeira vista, parece que os genes foram separados por
+estado de doença, com algumas excepções. Com este dendograma é possível verificar a distância entre grupos
+a partir da altura definida do lado esquerdo. De forma a definir os clusters, é necessário cortar a àrvore a
+uma dada altura de forma a agrupar todas as amostras à distância definida pelo corte."
+
+myplclust(cl.hier, labels=as.character(p10$disease.state), lab.col=as.numeric(p10$disease.state)+2, cex=0.4)
+
+#linha de corte
+abline(h=10)
+hclusters <- cutree(cl.hier, h=10)
+table(true=p10$disease.state[1:length(hclusters)],cluster=hclusters)
+
+#podemos também determinar o número de clusters que queremos
+hclusters <- cutree(cl.hier, k= 4)
+table(true=p10$disease.state[1:length(hclusters)],cluster=hclusters)
+
 
 #k-means
 "Escolher o número de k clusters e atribuir um gene a cada cluster aleatoriamente. De seguida
 calcula os novos centros e a distância de cada gene a esse novo centro. Por fim cada gene é atribuido
-ao centro mais próximo. Este processo é repetido até o algoritmo estar estável."
+ao centro mais próximo. Este processo é repetido até o algoritmo estar estável.
+Ao analisar os resultados para 9 clusters, notamos que obtemos resultados semelhantes."
 set.seed(1)
-km <- kmeans(exprs(p10),centers = 3)
-km$cluster
+km <- kmeans(exprs(p10),centers = 9)
+
+plot(km$cluster, col = as.numeric(p10$disease.state)+2, pch=16)
+plot(km$cluster, col = km$cluster, pch=16)
+table(true=p10$disease.state[1:length(km$cluster)],cluster=km$cluster)
+
 
 
 #heatmap
 "A árvore da linha representa os genes enquanto a da coluna representa o tecido. As cores na 
 heatmap representam as intensidades (relações) entre genes."
-heatmap(exprs(p10), labCol = F)
+
+#definir as cores
+hmcol <- colorRampPalette(brewer.pal(9, "GnBu"))
+cols <- palette(brewer.pal(8, "Dark2"))[as.numeric(p10$disease.state)]
+head(cbind(colnames(exprs(p10)),cols))
+
+rv <- rowVars(exprs(p10))
+idx <- order(-rv)
+
+heatmap.2(exprs(p10)[idx,], labCol=p10$disease.state,
+          trace="none", ColSideColors=cols, col=hmcol)
+
+"Analisando o heatmap é visível uma boa separação entre estados de doença (normal e SCLC) tal como nos
+métodos anteriores."
 
 ####################################### 4- CLASSIFICAÇÂO #############################################
+
+model_knn = train(t(exprs(eset_filtered)), eset_filtered$disease.state, method = "knn", trControl=trainControl("cv", number = 5))
+pred_knn = predict(model_knn, t(exprs(eset_filtered)))
+mk1=confusionMatrix(pred_knn, eset_filtered$disease.state)
+mk1$table; mk1$overal[1]
+
+
+
+
+model_tree = train(t(exprs(eset_filtered)), eset_filtered$disease.state, method = "rpart", trControl=trainControl("cv", number = 5))
+pred_tree = predict(model_tree, t(exprs(eset_filtered)))
+mt1 = confusionMatrix(pred_tree, eset_filtered$disease.state)
+mt1$table; mt1$overal[1]
+
+
+
+model_knn2 = train(t(exprs(eset_filtered)), eset_filtered$tissue, method = "knn", trControl=trainControl("cv", number = 5))
+pred_knn2 = predict(model_knn2, t(exprs(eset_filtered)))
+mk2=confusionMatrix(pred_knn2, eset_filtered$tissue)
+mk2$table; mk2$overal[1]
+
+
+
+model_tree2 = train(t(exprs(eset_filtered)), eset_filtered$tissue, method = "rpart", trControl=trainControl("cv", number = 5))
+pred_tree2 = predict(model_tree2, t(exprs(eset_filtered)))
+mt2=confusionMatrix(pred_tree2, eset_filtered$tissue)
+mt2$table; mt2$overal[1]
+
+
+model_svm2 = train(t(exprs(eset_filtered)), eset_filtered$tissue, method = "svmLinear", trControl=trainControl("cv", number = 5))
+pred_svm2 = predict(model_svm2, t(exprs(eset_filtered)))
+ms2=confusionMatrix(pred_svm2, eset_filtered$tissue)
+ms2$table; ms2$overal[1]
